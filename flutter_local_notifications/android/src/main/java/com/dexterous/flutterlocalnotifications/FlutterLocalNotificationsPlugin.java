@@ -20,12 +20,15 @@ import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.StatusBarNotification;
 import android.text.Html;
 import android.text.Spannable;
@@ -1266,6 +1269,11 @@ public class FlutterLocalNotificationsPlugin
     Notification notification = createNotification(context, notificationDetails);
     NotificationManagerCompat notificationManagerCompat = getNotificationManager(context);
 
+    // Treat priority-max notifications as "Critical Alerts" which always play a sound
+    if (notificationDetails.priority >= NotificationCompat.PRIORITY_MAX) {
+      overrideSilentModeAndConfigureCustomVolume(context, 0.8);
+    }
+
     if (notificationDetails.tag != null) {
       notificationManagerCompat.notify(
           notificationDetails.tag, notificationDetails.id, notification);
@@ -2249,6 +2257,59 @@ public class FlutterLocalNotificationsPlugin
 
     return true;
   }
+
+  @SuppressLint("NewApi")
+  static public void overrideSilentModeAndConfigureCustomVolume(Context context, Double ringToneVolume) {
+    Log.d(TAG, "Overriding silent mode for critical alerts.");
+    try {
+      NotificationManager notificationManager =
+        (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+      AudioManager audioManager =
+        (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+      int originalRingerMode = audioManager.getRingerMode();
+      int originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
+      int maxNotificationVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
+
+      // When DND mode is enabled, we get ringerMode as silent even though actual ringer mode is Normal
+      boolean isDndModeEnabled = notificationManager.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_ALL;
+      Log.d(TAG, "DND Mode Enabled = " + isDndModeEnabled);
+      if (isDndModeEnabled && originalRingerMode == AudioManager.RINGER_MODE_SILENT && originalNotificationVolume != 0) {
+        originalRingerMode = AudioManager.RINGER_MODE_NORMAL;
+      }
+
+      int newVolume = originalNotificationVolume;
+      if (ringToneVolume != null) {
+          newVolume = (int) Math.ceil(maxNotificationVolume * ringToneVolume);
+      }
+
+      audioManager.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+      audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, newVolume, 0);
+
+      //Resetting the original ring mode, volume and dnd mode
+      Handler handler = new Handler(Looper.getMainLooper());
+      int finalOriginalRingerMode = originalRingerMode;
+      handler.postDelayed(new Runnable() {
+        @Override
+        public void run() {
+          audioManager.setRingerMode(finalOriginalRingerMode);
+          audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotificationVolume, 0);
+        }
+      }, 3000);
+    } catch (Exception ex) {
+      Log.d(TAG, ex.toString());
+    }
+}
+
+  // private long getSoundFileDuration(Uri uri): long {
+  //     try {
+  //         val mmr = MediaMetadataRetriever()
+  //         mmr.setDataSource(this, uri)
+  //         val durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+  //         durationStr?.toLong() ?: 0
+  //     } catch (Exception e) {
+  //         return 5000
+  //     }
+  // }
 
   private static class PluginException extends RuntimeException {
     public final String code;

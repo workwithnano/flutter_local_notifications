@@ -1269,8 +1269,8 @@ public class FlutterLocalNotificationsPlugin
     Notification notification = createNotification(context, notificationDetails);
     NotificationManagerCompat notificationManagerCompat = getNotificationManager(context);
 
-    // Treat priority-max notifications as "Critical Alerts" which always play a sound
-    if (notificationDetails.priority >= NotificationCompat.PRIORITY_MAX) {
+    // Treat alarm notifications as "Critical Alerts" which always play a sound
+    if (notificationDetails.audioAttributesUsage == AudioAttributes.USAGE_ALARM) {
       overrideSilentModeAndConfigureCustomVolume(context, 0.8);
     }
 
@@ -2268,31 +2268,35 @@ public class FlutterLocalNotificationsPlugin
         (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
       int originalRingerMode = audioManager.getRingerMode();
       int originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
-      int maxNotificationVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
 
-      // When DND mode is enabled, we get ringerMode as silent even though actual ringer mode is Normal
-      boolean isDndModeEnabled = notificationManager.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_ALL;
-      Log.d(TAG, "DND Mode Enabled = " + isDndModeEnabled);
-      if (isDndModeEnabled && originalRingerMode == AudioManager.RINGER_MODE_SILENT && originalNotificationVolume != 0) {
-        originalRingerMode = AudioManager.RINGER_MODE_NORMAL;
-      }
+      int originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM);
+      int maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+      audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVolume, 0);
+//      int maxNotificationVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
 
-      int newVolume = originalNotificationVolume;
-      if (ringToneVolume != null) {
-          newVolume = (int) Math.ceil(maxNotificationVolume * ringToneVolume);
-      }
-
-      audioManager.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
-      audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, newVolume, 0);
+//      // When DND mode is enabled, we get ringerMode as silent even though actual ringer mode is Normal
+//      boolean isDndModeEnabled = notificationManager.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_ALL;
+//      Log.d(TAG, "DND Mode Enabled = " + isDndModeEnabled);
+//      if (isDndModeEnabled && originalRingerMode == AudioManager.RINGER_MODE_SILENT && originalNotificationVolume != 0) {
+//        originalRingerMode = AudioManager.RINGER_MODE_NORMAL;
+//      }
+//
+//      int newVolume = originalNotificationVolume;
+//      if (ringToneVolume != null) {
+//          newVolume = (int) Math.ceil(maxNotificationVolume * ringToneVolume);
+//      }
+//
+//      audioManager.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+//      audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, newVolume, 0);
 
       //Resetting the original ring mode, volume and dnd mode
       Handler handler = new Handler(Looper.getMainLooper());
-      int finalOriginalRingerMode = originalRingerMode;
+//      int finalOriginalRingerMode = originalRingerMode;
       handler.postDelayed(new Runnable() {
         @Override
         public void run() {
-          audioManager.setRingerMode(finalOriginalRingerMode);
-          audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotificationVolume, 0);
+//          audioManager.setRingerMode(finalOriginalRingerMode);
+          audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0);
         }
       }, 3000);
     } catch (Exception ex) {

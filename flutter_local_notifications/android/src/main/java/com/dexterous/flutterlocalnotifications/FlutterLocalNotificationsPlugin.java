@@ -2262,47 +2262,30 @@ public class FlutterLocalNotificationsPlugin
   static public void overrideSilentModeAndConfigureCustomVolume(Context context, Double ringToneVolume) {
     Log.d(TAG, "Overriding silent mode for critical alerts.");
     try {
-      NotificationManager notificationManager =
-        (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
       AudioManager audioManager =
-        (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-      int originalRingerMode = audioManager.getRingerMode();
-      int originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
+              (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
       int originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM);
       int maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-      audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVolume, 0);
-//      int maxNotificationVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
 
-//      // When DND mode is enabled, we get ringerMode as silent even though actual ringer mode is Normal
-//      boolean isDndModeEnabled = notificationManager.getCurrentInterruptionFilter() != NotificationManager.INTERRUPTION_FILTER_ALL;
-//      Log.d(TAG, "DND Mode Enabled = " + isDndModeEnabled);
-//      if (isDndModeEnabled && originalRingerMode == AudioManager.RINGER_MODE_SILENT && originalNotificationVolume != 0) {
-//        originalRingerMode = AudioManager.RINGER_MODE_NORMAL;
-//      }
-//
-//      int newVolume = originalNotificationVolume;
-//      if (ringToneVolume != null) {
-//          newVolume = (int) Math.ceil(maxNotificationVolume * ringToneVolume);
-//      }
-//
-//      audioManager.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
-//      audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, newVolume, 0);
+      int newVolume = originalAlarmVolume;
+      if (ringToneVolume != null) {
+        newVolume = (int) Math.ceil(maxAlarmVolume * ringToneVolume);
+      }
+      audioManager.setStreamVolume(AudioManager.STREAM_ALARM, newVolume, 0);
 
-      //Resetting the original ring mode, volume and dnd mode
+      //Resetting the original volume
       Handler handler = new Handler(Looper.getMainLooper());
-//      int finalOriginalRingerMode = originalRingerMode;
       handler.postDelayed(new Runnable() {
         @Override
         public void run() {
-//          audioManager.setRingerMode(finalOriginalRingerMode);
           audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0);
         }
       }, 3000);
     } catch (Exception ex) {
       Log.d(TAG, ex.toString());
     }
-}
+  }
 
   // private long getSoundFileDuration(Uri uri): long {
   //     try {

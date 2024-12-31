@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -209,6 +210,7 @@ public class FlutterLocalNotificationsPlugin
   private MethodChannel channel;
   private Context applicationContext;
   private Activity mainActivity;
+  static private MediaPlayer mediaPlayer;
   static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1;
 
   static final int EXACT_ALARM_PERMISSION_REQUEST_CODE = 2;
@@ -2265,21 +2267,28 @@ public class FlutterLocalNotificationsPlugin
       AudioManager audioManager =
               (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
-      int originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM);
-      int maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+      int originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+      int maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
 
       int newVolume = originalAlarmVolume;
       if (ringToneVolume != null) {
         newVolume = (int) Math.ceil(maxAlarmVolume * ringToneVolume);
       }
-      audioManager.setStreamVolume(AudioManager.STREAM_ALARM, newVolume, 0);
+      audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0);
+
+      // Initialize and play alarm sound
+      Uri uri = Uri.parse("android.resource://" + context.getPackageName() + "/raw/pager");
+      mediaPlayer = MediaPlayer.create(context, uri);
+      mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+      mediaPlayer.start();
+      Log.d(TAG, "Starting alarm for uri " + uri.toString());
 
       //Resetting the original volume
       Handler handler = new Handler(Looper.getMainLooper());
       handler.postDelayed(new Runnable() {
         @Override
         public void run() {
-          audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0);
+          audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalAlarmVolume, 0);
         }
       }, 3000);
     } catch (Exception ex) {

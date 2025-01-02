@@ -20,12 +20,16 @@ import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.StatusBarNotification;
 import android.text.Html;
 import android.text.Spannable;
@@ -206,6 +210,7 @@ public class FlutterLocalNotificationsPlugin
   private MethodChannel channel;
   private Context applicationContext;
   private Activity mainActivity;
+  static private MediaPlayer mediaPlayer;
   static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1;
 
   static final int EXACT_ALARM_PERMISSION_REQUEST_CODE = 2;
@@ -1266,6 +1271,11 @@ public class FlutterLocalNotificationsPlugin
     Notification notification = createNotification(context, notificationDetails);
     NotificationManagerCompat notificationManagerCompat = getNotificationManager(context);
 
+    // Treat alarm notifications as "Critical Alerts" which always play a sound
+    if (notificationDetails.audioAttributesUsage == AudioAttributes.USAGE_ALARM) {
+      overrideSilentModeAndConfigureCustomVolume(context, 0.8);
+    }
+
     if (notificationDetails.tag != null) {
       notificationManagerCompat.notify(
           notificationDetails.tag, notificationDetails.id, notification);
@@ -2249,6 +2259,53 @@ public class FlutterLocalNotificationsPlugin
 
     return true;
   }
+
+  @SuppressLint("NewApi")
+  static public void overrideSilentModeAndConfigureCustomVolume(Context context, Double ringToneVolume) {
+    Log.d(TAG, "Overriding silent mode for critical alerts.");
+    try {
+      AudioManager audioManager =
+              (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+
+      int originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+      int maxAlarmVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+
+      int newVolume = originalAlarmVolume;
+      if (ringToneVolume != null) {
+        newVolume = (int) Math.ceil(maxAlarmVolume * ringToneVolume);
+      }
+      audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0);
+
+      // Initialize and play alarm sound
+      Uri uri = Uri.parse("android.resource://" + context.getPackageName() + "/raw/pager");
+      mediaPlayer = MediaPlayer.create(context, uri);
+      mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+      mediaPlayer.start();
+      Log.d(TAG, "Starting alarm for uri " + uri.toString());
+
+      //Resetting the original volume
+      Handler handler = new Handler(Looper.getMainLooper());
+      handler.postDelayed(new Runnable() {
+        @Override
+        public void run() {
+          audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalAlarmVolume, 0);
+        }
+      }, 3000);
+    } catch (Exception ex) {
+      Log.d(TAG, ex.toString());
+    }
+  }
+
+  // private long getSoundFileDuration(Uri uri): long {
+  //     try {
+  //         val mmr = MediaMetadataRetriever()
+  //         mmr.setDataSource(this, uri)
+  //         val durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+  //         durationStr?.toLong() ?: 0
+  //     } catch (Exception e) {
+  //         return 5000
+  //     }
+  // }
 
   private static class PluginException extends RuntimeException {
     public final String code;

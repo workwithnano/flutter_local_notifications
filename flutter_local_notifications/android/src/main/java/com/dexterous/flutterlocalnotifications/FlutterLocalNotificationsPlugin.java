@@ -39,6 +39,9 @@ import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -1273,7 +1276,21 @@ public class FlutterLocalNotificationsPlugin
 
     // Treat alarm notifications as "Critical Alerts" which always play a sound
     if (notificationDetails.audioAttributesUsage == AudioAttributes.USAGE_ALARM) {
-      overrideSilentModeAndConfigureCustomVolume(context, 0.8);
+      SharedPreferences flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
+      double volume = 0.7;
+      String notificationPreferences = flutterPrefs.getString("flutter.notificationPreferences", "");
+      if (!StringUtils.isNullOrEmpty(notificationPreferences)) {
+        notificationPreferences = notificationPreferences.replace("\\", "");
+        try {
+          JSONObject prefsJson = new JSONObject(notificationPreferences.substring(notificationPreferences.indexOf("{"), notificationPreferences.lastIndexOf("}") + 1));
+          volume = prefsJson.getDouble("criticalAlertVolume");
+          Log.d(TAG, "Using alert volume from shared preferences: " + volume);
+        } catch (JSONException e) {
+          Log.e(TAG, "Error fetching volume from shared preferences. Using default volume");
+          Log.e(TAG, "Error message: " + e.getLocalizedMessage());
+        }
+      }
+      overrideSilentModeAndConfigureCustomVolume(context, volume);
     }
 
     if (notificationDetails.tag != null) {

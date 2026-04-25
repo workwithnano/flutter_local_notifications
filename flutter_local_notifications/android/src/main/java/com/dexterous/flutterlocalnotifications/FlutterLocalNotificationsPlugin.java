@@ -1274,23 +1274,63 @@ public class FlutterLocalNotificationsPlugin
     Notification notification = createNotification(context, notificationDetails);
     NotificationManagerCompat notificationManagerCompat = getNotificationManager(context);
 
-    // Treat alarm notifications as "Critical Alerts" which always play a sound
+    // For alarm-usage notifications, decide whether the channel sound will be
+    // audible. If it will (alarm volume > 0 and either DND is off or the
+    // channel bypasses DND), let the system play the channel sound and do
+    // nothing extra. Otherwise play the channel's sound via MediaPlayer to
+    // override the silent path. This avoids double-playback when the channel
+    // would have been audible anyway.
     if (notificationDetails.audioAttributesUsage == AudioAttributes.USAGE_ALARM) {
-      SharedPreferences flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
-      double volume = 0.7;
-      String notificationPreferences = flutterPrefs.getString("flutter.notificationPreferences", "");
-      if (!StringUtils.isNullOrEmpty(notificationPreferences)) {
-        notificationPreferences = notificationPreferences.replace("\\", "");
-        try {
-          JSONObject prefsJson = new JSONObject(notificationPreferences.substring(notificationPreferences.indexOf("{"), notificationPreferences.lastIndexOf("}") + 1));
-          volume = prefsJson.getDouble("criticalAlertVolume");
-          Log.d(TAG, "Using alert volume from shared preferences: " + volume);
-        } catch (JSONException e) {
-          Log.e(TAG, "Error fetching volume from shared preferences. Using default volume");
-          Log.e(TAG, "Error message: " + e.getLocalizedMessage());
+      AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+      NotificationManager notificationManager =
+          (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+      boolean shouldOverride;
+      if (audioManager.getStreamVolume(AudioManager.STREAM_ALARM) == 0) {
+        shouldOverride = true;
+      } else if (VERSION.SDK_INT >= VERSION_CODES.M
+          && notificationManager.getCurrentInterruptionFilter()
+              != NotificationManager.INTERRUPTION_FILTER_ALL) {
+        boolean bypassesDnd = false;
+        if (VERSION.SDK_INT >= VERSION_CODES.O && notificationDetails.channelId != null) {
+          NotificationChannel channel =
+              notificationManager.getNotificationChannel(notificationDetails.channelId);
+          bypassesDnd = channel != null && channel.canBypassDnd();
         }
+        shouldOverride = !bypassesDnd;
+      } else {
+        shouldOverride = false;
       }
-      overrideSilentModeAndConfigureCustomVolume(context, volume);
+
+      if (shouldOverride) {
+        SharedPreferences flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
+        double volume = 0.7;
+        String notificationPreferences = flutterPrefs.getString("flutter.notificationPreferences", "");
+        if (!StringUtils.isNullOrEmpty(notificationPreferences)) {
+          notificationPreferences = notificationPreferences.replace("\\", "");
+          try {
+            JSONObject prefsJson = new JSONObject(notificationPreferences.substring(notificationPreferences.indexOf("{"), notificationPreferences.lastIndexOf("}") + 1));
+            volume = prefsJson.getDouble("criticalAlertVolume");
+            Log.d(TAG, "Using alert volume from shared preferences: " + volume);
+          } catch (JSONException e) {
+            Log.e(TAG, "Error fetching volume from shared preferences. Using default volume");
+            Log.e(TAG, "Error message: " + e.getLocalizedMessage());
+          }
+        }
+
+        Uri soundUri = null;
+        if (VERSION.SDK_INT >= VERSION_CODES.O && notificationDetails.channelId != null) {
+          NotificationChannel channel =
+              notificationManager.getNotificationChannel(notificationDetails.channelId);
+          if (channel != null) soundUri = channel.getSound();
+        }
+        if (soundUri == null) {
+          soundUri = retrieveSoundResourceUri(
+              context, notificationDetails.sound, notificationDetails.soundSource);
+        }
+
+        overrideSilentModeAndConfigureCustomVolume(context, volume, soundUri);
+      }
     }
 
     if (notificationDetails.tag != null) {
@@ -2278,7 +2318,7 @@ public class FlutterLocalNotificationsPlugin
   }
 
   @SuppressLint("NewApi")
-  static public void overrideSilentModeAndConfigureCustomVolume(Context context, Double ringToneVolume) {
+  static public void overrideSilentModeAndConfigureCustomVolume(Context context, Double ringToneVolume, Uri uri) {
     Log.d(TAG, "Overriding silent mode for critical alerts.");
     try {
       AudioManager audioManager =
@@ -2294,7 +2334,6 @@ public class FlutterLocalNotificationsPlugin
       audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0);
 
       // Initialize and play alarm sound
-      Uri uri = Uri.parse("android.resource://" + context.getPackageName() + "/raw/pager");
       mediaPlayer = MediaPlayer.create(context, uri);
       mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
       mediaPlayer.start();

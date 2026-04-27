@@ -1285,22 +1285,38 @@ public class FlutterLocalNotificationsPlugin
       NotificationManager notificationManager =
           (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
-      boolean shouldOverride;
-      if (audioManager.getStreamVolume(AudioManager.STREAM_ALARM) == 0) {
-        shouldOverride = true;
-      } else if (VERSION.SDK_INT >= VERSION_CODES.M
-          && notificationManager.getCurrentInterruptionFilter()
-              != NotificationManager.INTERRUPTION_FILTER_ALL) {
-        boolean bypassesDnd = false;
-        if (VERSION.SDK_INT >= VERSION_CODES.O && notificationDetails.channelId != null) {
-          NotificationChannel channel =
-              notificationManager.getNotificationChannel(notificationDetails.channelId);
-          bypassesDnd = channel != null && channel.canBypassDnd();
-        }
-        shouldOverride = !bypassesDnd;
-      } else {
-        shouldOverride = false;
+      int alarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM);
+      int filter = (VERSION.SDK_INT >= VERSION_CODES.M)
+          ? notificationManager.getCurrentInterruptionFilter()
+          : NotificationManager.INTERRUPTION_FILTER_ALL;
+      boolean channelBypassesDnd = false;
+      if (VERSION.SDK_INT >= VERSION_CODES.O && notificationDetails.channelId != null) {
+        NotificationChannel channel =
+            notificationManager.getNotificationChannel(notificationDetails.channelId);
+        channelBypassesDnd = channel != null && channel.canBypassDnd();
       }
+
+      boolean shouldOverride;
+      String reason;
+      if (alarmVolume == 0) {
+        shouldOverride = true;
+        reason = "alarmVolume=0";
+      } else if (filter == NotificationManager.INTERRUPTION_FILTER_ALL
+          || filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
+        shouldOverride = false;
+        reason = "filter=" + filter + " (no DND restriction)";
+      } else if (channelBypassesDnd) {
+        shouldOverride = false;
+        reason = "filter=" + filter + " but channel bypasses DND";
+      } else {
+        shouldOverride = true;
+        reason = "filter=" + filter + " and channel does not bypass DND";
+      }
+      Log.d(TAG,
+          "Critical-alert audibility check: alarmVolume=" + alarmVolume
+              + " filter=" + filter + " channelBypassesDnd=" + channelBypassesDnd
+              + " channelId=" + notificationDetails.channelId
+              + " shouldOverride=" + shouldOverride + " (" + reason + ")");
 
       if (shouldOverride) {
         SharedPreferences flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);

@@ -1298,19 +1298,22 @@ public class FlutterLocalNotificationsPlugin
 
       boolean shouldOverride;
       String reason;
+      // Alarm-usage notifications play on STREAM_ALARM, which DND treats as a
+      // privileged stream. The channel sound is suppressed only in the
+      // FILTER_NONE ("total silence") mode, and even then only when the
+      // channel does not bypass DND. Other modes (ALL, UNKNOWN, PRIORITY,
+      // ALARMS) all allow alarm-usage sounds through, so the override would
+      // double up on the channel sound.
       if (alarmVolume == 0) {
         shouldOverride = true;
         reason = "alarmVolume=0";
-      } else if (filter == NotificationManager.INTERRUPTION_FILTER_ALL
-          || filter == NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
-        shouldOverride = false;
-        reason = "filter=" + filter + " (no DND restriction)";
-      } else if (channelBypassesDnd) {
-        shouldOverride = false;
-        reason = "filter=" + filter + " but channel bypasses DND";
-      } else {
+      } else if (filter == NotificationManager.INTERRUPTION_FILTER_NONE
+          && !channelBypassesDnd) {
         shouldOverride = true;
-        reason = "filter=" + filter + " and channel does not bypass DND";
+        reason = "filter=NONE and channel does not bypass DND";
+      } else {
+        shouldOverride = false;
+        reason = "filter=" + filter + " allows alarm-usage sounds";
       }
       Log.d(TAG,
           "Critical-alert audibility check: alarmVolume=" + alarmVolume
